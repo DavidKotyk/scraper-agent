@@ -1,4 +1,8 @@
 import asyncio
+import subprocess
+import sys
+# Ensure Playwright browsers are installed when running in a fresh environment
+subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps"], check=True)
 import json
 import logging
 import requests
