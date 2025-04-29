@@ -2,7 +2,11 @@ import asyncio
 import subprocess
 import sys
 # Ensure Playwright browsers are installed when running in a fresh environment
-subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps"], check=True)
+try:
+    subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps"], check=True)
+except Exception as e:
+    # Non-fatal: continue even if browser install fails (browsers may already be present)
+    print(f"Warning: Playwright install failed: {e}")
 import json
 import logging
 import requests
