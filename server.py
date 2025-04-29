@@ -12,25 +12,20 @@ app = FastAPI(
 @app.get("/events/", summary="Get events for a city")
 async def get_events(city: str):
     """
-    Fetch events near the specified city.
+    Fetch events near the specified city. All returned items include
+    placeholder values ('NA') for missing fields (url, date, description).
     """
     try:
         data = await gather_data(city)
-        # If scraping yields no events, return sample fallback data near SF
-        if not data:
-            return [
-                {"source": "sample", "name": "Sample SF Park Tour", "url": "", "date": "2025-05-01", "lat": "37.7694", "lon": "-122.4862"},
-                {"source": "sample", "name": "SF Food Festival",   "url": "", "date": "2025-05-03", "lat": "37.7894", "lon": "-122.4104"},
-                {"source": "sample", "name": "Golden Gate Meetup","url": "", "date": "2025-05-05", "lat": "37.8078", "lon": "-122.4750"},
-            ]
-        return data
     except Exception:
-        # On errors, return the same sample fallback data
-        return [
-            {"source": "sample", "name": "Sample SF Park Tour", "url": "", "date": "2025-05-01", "lat": "37.7694", "lon": "-122.4862"},
-            {"source": "sample", "name": "SF Food Festival",   "url": "", "date": "2025-05-03", "lat": "37.7894", "lon": "-122.4104"},
-            {"source": "sample", "name": "Golden Gate Meetup","url": "", "date": "2025-05-05", "lat": "37.8078", "lon": "-122.4750"},
-        ]
+        # On errors, return empty list
+        return []
+    # Ensure each item has all expected keys
+    for item in data:
+        item.setdefault('url', 'NA')
+        item.setdefault('date', 'NA')
+        item.setdefault('description', 'NA')
+    return data
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
