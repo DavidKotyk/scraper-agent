@@ -2,8 +2,11 @@ import asyncio
 import json
 import logging
 import requests
+from playwright.async_api import async_playwright
 
-# Simplified: only fetch nearby parks via OSM; removed other scraping dependencies
+from utils import random_delay, get_random_ua, rotate_proxy
+from parser import parse_event_description
+from geocode import geocode_address
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -102,12 +105,62 @@ def scrape_osm_parks(city: str) -> list:
     return results
 
 async def gather_data(city: str) -> list:
-    """Simplified: only return nearby parks via OSM for now."""
+    """Main entry point: gather and return combined structured data from multiple sources."""
+    results = []
+    # Launch browser-based scrapers
     try:
-        return scrape_osm_parks(city)
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            # Setup context with random UA and optional proxy
+            ua = get_random_ua()
+            proxy_cfg = rotate_proxy()
+            if proxy_cfg:
+                context = await browser.new_context(user_agent=ua, proxy=proxy_cfg)
+            else:
+                context = await browser.new_context(user_agent=ua)
+            page = await context.new_page()
+            # Yelp
+            try:
+                yelp_data = await scrape_yelp_city(page, city)
+                results.extend(yelp_data)
+            except Exception as e:
+                logger.error(f"Yelp scrape failed: {e}")
+            # Eventbrite
+            try:
+                eb_data = await scrape_eventbrite_city(page, city)
+                results.extend(eb_data)
+            except Exception as e:
+                logger.error(f"Eventbrite scrape failed: {e}")
+            # Meetup
+            try:
+                meet_data = await scrape_meetup_city(page, city)
+                results.extend(meet_data)
+            except Exception as e:
+                logger.error(f"Meetup scrape failed: {e}")
+            await browser.close()
+    except Exception as e:
+        logger.error(f"Browser scrapers failed: {e}")
+    # Fetch nearby parks via OSM Nominatim as fallback real data
+    try:
+        osm_data = scrape_osm_parks(city)
+        results.extend(osm_data)
     except Exception as e:
         logger.error(f"OSM parks fetch failed: {e}")
-        return []
+    # Geocode and NLP parse for enriched fields
+    for item in results:
+        if 'address' in item:
+            try:
+                coords = geocode_address(item['address'])
+                item['coordinates'] = coords
+            except Exception as e:
+                logger.error(f"Geocode failed: {e}")
+        if 'description' in item:
+            try:
+                item['entities'] = parse_event_description(item['description'])
+            except Exception as e:
+                logger.error(f"Description parse failed: {e}")
+    # TODO: normalize, dedupe, filter by relevance/distance
+    return results
 
 if __name__ == '__main__':
     import sys
